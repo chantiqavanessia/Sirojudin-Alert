@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ── MOCK DATA ────────────────────────────────────────────────────────────────
 const ZONES = [
@@ -15,28 +15,33 @@ const RISK_COLOR = {
   aman:    { bg: "#34C759", light: "#E8FAF0", text: "#1A6B34", label: "AMAN" },
 };
 
+
+const API_KEY = "76546fc132786b1968209788ba4ee55d";
 function useSensorData() {
   const [data, setData] = useState({
-    curahHujan: 34.2,
-    ketinggianAir: 78,
-    debitAir: 2.4,
-    suhu: 27,
-    lastUpdate: new Date(),
+    curahHujan: 0, ketinggianAir: 0, debitAir: 0,
+    suhu: 0, deskripsi: "Memuat...", lastUpdate: new Date(), loading: true,
   });
-
+  const fetchWeather = async () => {
+    try {
+      const res = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?q=Semarang&appid=${API_KEY}&units=metric`
+      );
+      const json = await res.json();
+      const curahHujan = json.rain ? +(json.rain["1h"] || 0).toFixed(1) : 0;
+      const suhu = +json.main.temp.toFixed(1);
+      const humidity = json.main.humidity;
+      const ketinggianAir = Math.min(100, Math.round(curahHujan * 8 + humidity * 0.3));
+      const debitAir = +(curahHujan * 0.15 + 0.5).toFixed(2);
+      setData({ curahHujan, ketinggianAir, debitAir, suhu, humidity,
+        deskripsi: json.weather[0].description, lastUpdate: new Date(), loading: false });
+    } catch (err) { console.error("Gagal fetch:", err); }
+  };
   useEffect(() => {
-    const t = setInterval(() => {
-      setData(d => ({
-        curahHujan:    +(d.curahHujan   + (Math.random() - 0.5) * 2).toFixed(1),
-        ketinggianAir: Math.min(100, Math.max(0, +(d.ketinggianAir + (Math.random() - 0.45) * 3).toFixed(0))),
-        debitAir:      +(d.debitAir     + (Math.random() - 0.5) * 0.2).toFixed(2),
-        suhu:          +(d.suhu         + (Math.random() - 0.5) * 0.3).toFixed(1),
-        lastUpdate:    new Date(),
-      }));
-    }, 2500);
+    fetchWeather();
+    const t = setInterval(fetchWeather, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
-
   return data;
 }
 
@@ -91,7 +96,9 @@ function MiniChart({ data }) {
   const W = 260, H = 60;
   const min = Math.min(...data.map(d => d.v));
   const max = Math.max(...data.map(d => d.v));
+  const px = (v) => W * (data.indexOf(v) === -1 ? 0 : data.findIndex(d => d.v === v)) / (data.length - 1);
   const py = (v) => H - ((v - min) / (max - min)) * (H - 8) - 4;
+
   const pts = data.map((d, i) => `${(i / (data.length - 1)) * W},${py(d.v)}`).join(" ");
 
   return (
@@ -116,12 +123,12 @@ function MiniChart({ data }) {
 }
 
 // ── SCREENS ─────────────────────────────────────────────────────────────────
+
 function SplashScreen({ onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
-  }, [onDone]);
-
+  }, []);
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
@@ -159,6 +166,7 @@ function HomeScreen({ sensor, onNav, zones }) {
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#F4F7FF" }}>
+      {/* Header */}
       <div style={{
         background: "linear-gradient(135deg, #0F2952 0%, #1D4ED8 100%)",
         padding: "48px 20px 28px", color: "#fff",
@@ -174,6 +182,7 @@ function HomeScreen({ sensor, onNav, zones }) {
           </div>
         </div>
 
+        {/* Status card */}
         <div style={{
           marginTop: 20, background: "rgba(255,255,255,0.1)",
           borderRadius: 16, padding: "16px 18px",
@@ -194,6 +203,7 @@ function HomeScreen({ sensor, onNav, zones }) {
       </div>
 
       <div style={{ padding: "16px 16px 80px" }}>
+        {/* Sensor cards */}
         <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em", marginBottom: 10, textTransform: "uppercase" }}>
           Data Sensor Real-time
         </div>
@@ -216,6 +226,7 @@ function HomeScreen({ sensor, onNav, zones }) {
           ))}
         </div>
 
+        {/* Quick actions */}
         <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em", marginBottom: 10, textTransform: "uppercase" }}>
           Menu Utama
         </div>
@@ -242,6 +253,7 @@ function HomeScreen({ sensor, onNav, zones }) {
           ))}
         </div>
 
+        {/* Zone list preview */}
         <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.08em", marginBottom: 10, textTransform: "uppercase" }}>
           Status Zona
         </div>
@@ -278,7 +290,9 @@ function MapScreen({ zones }) {
         <div style={{ fontSize: 12, color: "#93C5FD", marginTop: 2 }}>Jl. Sirojudin & sekitarnya</div>
       </div>
 
+      {/* Map area */}
       <div style={{ position: "relative", flex: "0 0 52%", background: "#E8F0FE", overflow: "hidden" }}>
+        {/* Fake road grid */}
         <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
           <defs>
             <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -286,12 +300,14 @@ function MapScreen({ zones }) {
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#grid)"/>
+          {/* Main road */}
           <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#B0C4DE" strokeWidth="8" strokeOpacity="0.6"/>
           <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#B0C4DE" strokeWidth="5" strokeOpacity="0.4"/>
           <line x1="25%" y1="0" x2="30%" y2="100%" stroke="#B0C4DE" strokeWidth="3" strokeOpacity="0.3"/>
           <text x="51%" y="47%" fontSize="10" fill="#64748B" fontWeight="600">Jl. Sirojudin</text>
         </svg>
 
+        {/* Zone markers */}
         {zones.map(z => (
           <button key={z.id} onClick={() => setSelected(selected === z.id ? null : z.id)}
             style={{
@@ -314,12 +330,13 @@ function MapScreen({ zones }) {
           </button>
         ))}
 
+        {/* Legend */}
         <div style={{
           position: "absolute", bottom: 10, right: 10,
           background: "rgba(255,255,255,0.92)", borderRadius: 10, padding: "8px 10px",
           fontSize: 10, backdropFilter: "blur(4px)",
         }}>
-          {['bahaya', 'waspada', 'aman'].map(r => (
+          {["bahaya", "waspada", "aman"].map(r => (
             <div key={r} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: RISK_COLOR[r].bg }}/>
               <span style={{ color: "#334155", textTransform: "capitalize" }}>{r}</span>
@@ -328,6 +345,7 @@ function MapScreen({ zones }) {
         </div>
       </div>
 
+      {/* Zone detail */}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px 80px" }}>
         {sel ? (
           <div style={{
@@ -406,6 +424,7 @@ function MonitorScreen({ sensor }) {
       </div>
 
       <div style={{ padding: "16px 16px 80px" }}>
+        {/* Main chart */}
         <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 12, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div>
@@ -416,12 +435,13 @@ function MonitorScreen({ sensor }) {
           </div>
           <MiniChart data={history}/>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-            {['08:00', '11:00', '14:00', '17:00', '19:00'].map(t => (
+            {["08:00", "11:00", "14:00", "17:00", "19:00"].map(t => (
               <span key={t} style={{ fontSize: 10, color: "#94A3B8" }}>{t}</span>
             ))}
           </div>
         </div>
 
+        {/* Sensor detail cards */}
         {[
           { label: "Curah Hujan", val: sensor.curahHujan, unit: "mm/h", icon: "🌧️",
             risk: sensor.curahHujan > 30 ? "bahaya" : sensor.curahHujan > 15 ? "waspada" : "aman",
@@ -611,6 +631,7 @@ function GuideScreen() {
   );
 }
 
+// ── NAV BAR ──────────────────────────────────────────────────────────────────
 function NavBar({ current, onNav }) {
   const items = [
     { id: "home", icon: "🏠", label: "Beranda" },
@@ -619,7 +640,6 @@ function NavBar({ current, onNav }) {
     { id: "alert", icon: "🚨", label: "Alert" },
     { id: "guide", icon: "📋", label: "Panduan" },
   ];
-
   return (
     <div style={{
       position: "absolute", bottom: 0, left: 0, right: 0,
@@ -652,11 +672,24 @@ function NavBar({ current, onNav }) {
   );
 }
 
+// ── APP SHELL ────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen, setScreen] = useState("splash");
   const sensor = useSensorData();
   const [zones, setZones] = useState(ZONES);
 
+  useEffect(() => {
+    if (!sensor.loading) {
+      setZones(ZONES.map((z, i) => {
+        const base = sensor.curahHujan * 8 + sensor.humidity * 0.3;
+        const level = Math.min(95, Math.max(5, Math.round(base - i * 8 + Math.random() * 5)));
+        const risk = level > 65 ? "bahaya" : level > 35 ? "waspada" : "aman";
+        return { ...z, risk, level };
+      }));
+    }
+  }, [sensor.curahHujan, sensor.humidity, sensor.loading]);
+
+  // Slowly mutate zone risks based on sensor
   useEffect(() => {
     const t = setInterval(() => {
       setZones(prev => prev.map(z => {
@@ -702,12 +735,14 @@ export default function App() {
         ::-webkit-scrollbar { display: none; }
       `}</style>
 
+      {/* Notch */}
       <div style={{
         position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
         width: 120, height: 28, background: "#0A1628", borderRadius: "0 0 16px 16px",
         zIndex: 200,
       }}/>
 
+      {/* Status bar time */}
       <div style={{
         position: "absolute", top: 6, left: 20, right: 20,
         display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -719,6 +754,7 @@ export default function App() {
         <span style={{ fontSize: 11, color: "#fff" }}>📶 🔋</span>
       </div>
 
+      {/* Screen content */}
       <div style={{ height: "100%", paddingBottom: 0 }}>
         <Screen sensor={sensor} onNav={setScreen} zones={zones}/>
       </div>
@@ -727,3 +763,4 @@ export default function App() {
     </div>
   );
 }
+
