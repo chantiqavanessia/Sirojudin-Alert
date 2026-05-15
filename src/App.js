@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 // ── MOCK DATA ────────────────────────────────────────────────────────────────
 const ZONES = [
@@ -96,7 +96,6 @@ function MiniChart({ data }) {
   const W = 260, H = 60;
   const min = Math.min(...data.map(d => d.v));
   const max = Math.max(...data.map(d => d.v));
-  const px = (v) => W * (data.indexOf(v) === -1 ? 0 : data.findIndex(d => d.v === v)) / (data.length - 1);
   const py = (v) => H - ((v - min) / (max - min)) * (H - 8) - 4;
 
   const pts = data.map((d, i) => `${(i / (data.length - 1)) * W},${py(d.v)}`).join(" ");
@@ -128,7 +127,7 @@ function SplashScreen({ onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
-  }, []);
+}, [onDone]);
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
