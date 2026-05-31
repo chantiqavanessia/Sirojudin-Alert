@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import MapView from "./MapView";
 
 // ── MOCK DATA ────────────────────────────────────────────────────────────────
 const ZONES = [
-  { id: 1, name: "Depan Gang Sirojudin 3", risk: "bahaya", level: 87, x: 48, y: 38 },
-  { id: 2, name: "Persimpangan Utama", risk: "waspada", level: 61, x: 52, y: 55 },
-  { id: 3, name: "Kos Area Barat", risk: "waspada", level: 58, x: 30, y: 62 },
-  { id: 4, name: "Area Masjid", risk: "aman", level: 22, x: 68, y: 68 },
-  { id: 5, name: "Ujung Selatan", risk: "aman", level: 15, x: 50, y: 80 },
+  { id: 1, name: "Depan Gang Sirojudin 3", risk: "bahaya", level: 87, lat: -7.056643, lng: 110.436249 },
+  { id: 2, name: "Persimpangan Utama", risk: "waspada", level: 61, lat: -7.056477, lng: 110.436498 },
+  { id: 3, name: "Kos Area Barat", risk: "waspada", level: 58, lat: -7.057674, lng: 110.435833 },
+  { id: 4, name: "Area Masjid", risk: "aman", level: 22, lat: -6.9730, lng: 110.4170 },
+  { id: 5, name: "Ujung Selatan", risk: "aman", level: 15, lat: -6.9790, lng: 110.4140 },
 ];
 
 const RISK_COLOR = {
@@ -19,8 +20,8 @@ const RISK_COLOR = {
 const API_KEY = "76546fc132786b1968209788ba4ee55d";
 function useSensorData() {
   const [data, setData] = useState({
-    curahHujan: 0, ketinggianAir: 0, debitAir: 0,
-    suhu: 0, deskripsi: "Memuat...", lastUpdate: new Date(), loading: true,
+    curahHujan: null, ketinggianAir: null, debitAir: null,
+    suhu: null, humidity: null, deskripsi: "Memuat...", lastUpdate: null, loading: true,
   });
   const fetchWeather = async () => {
     try {
@@ -28,14 +29,18 @@ function useSensorData() {
         `https://api.openweathermap.org/data/2.5/weather?q=Semarang&appid=${API_KEY}&units=metric`
       );
       const json = await res.json();
+      if (!res.ok) throw new Error(json.message || "Gagal mengambil data");
       const curahHujan = json.rain ? +(json.rain["1h"] || 0).toFixed(1) : 0;
       const suhu = +json.main.temp.toFixed(1);
       const humidity = json.main.humidity;
       const ketinggianAir = Math.min(100, Math.round(curahHujan * 8 + humidity * 0.3));
       const debitAir = +(curahHujan * 0.15 + 0.5).toFixed(2);
-      setData({ curahHujan, ketinggianAir, debitAir, suhu, humidity,
-        deskripsi: json.weather[0].description, lastUpdate: new Date(), loading: false });
-    } catch (err) { console.error("Gagal fetch:", err); }
+      setData(prev => ({ ...prev, curahHujan, ketinggianAir, debitAir, suhu, humidity,
+        deskripsi: json.weather[0].description, lastUpdate: new Date(), loading: false }));
+    } catch (err) {
+      console.error("Gagal fetch:", err);
+      setData(prev => ({ ...prev, deskripsi: "Gagal memuat data", lastUpdate: new Date(), loading: false }));
+    }
   };
   useEffect(() => {
     fetchWeather();
@@ -49,6 +54,30 @@ function useHistoryData() {
   const base = [55, 60, 58, 72, 80, 78, 65, 70, 76, 82, 78, 75];
   return base.map((v, i) => ({ t: `${8 + i}:00`, v }));
 }
+
+function useAlertHistory() {
+  const [alerts, setAlerts] = useState([]);
+
+  const addAlert = (title, msg, risk, icon = "🚨") => {
+    const now = new Date();
+    const time = now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    const date = "Hari ini";
+    const newAlert = {
+      id: Date.now(),
+      time,
+      date,
+      risk,
+      title,
+      msg,
+      icon,
+    };
+    setAlerts(prev => [newAlert, ...prev].slice(0, 20));
+  };
+
+  return { alerts, addAlert };
+}
+
+
 
 // ── UTILS ───────────────────────────────────────────────────────────────────
 function RiskBadge({ risk, size = "sm" }) {
@@ -127,7 +156,7 @@ function SplashScreen({ onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
-}, [onDone]);
+  }, []);
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
@@ -161,7 +190,9 @@ function HomeScreen({ sensor, onNav, zones }) {
   const topRisk = zones.find(z => z.risk === "bahaya") || zones[0];
   const bahayaCount = zones.filter(z => z.risk === "bahaya").length;
   const waspadaCount = zones.filter(z => z.risk === "waspada").length;
-  const timeStr = sensor.lastUpdate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const timeStr = sensor.lastUpdate ? sensor.lastUpdate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--";
+  const formatValue = (value, unit = "") => value === null || value === undefined ? "-" : `${value}${unit}`;
+  const humidityLabel = sensor.humidity === null ? "Memuat..." : `${sensor.humidity}%`;
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#F4F7FF" }}>
@@ -208,10 +239,10 @@ function HomeScreen({ sensor, onNav, zones }) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
           {[
-            { label: "Curah Hujan", val: `${sensor.curahHujan} mm/h`, icon: "🌧️", sub: sensor.curahHujan > 30 ? "Lebat" : "Sedang" },
-            { label: "Ketinggian Air", val: `${sensor.ketinggianAir} cm`, icon: "📏", sub: sensor.ketinggianAir > 70 ? "Kritis" : "Normal" },
-            { label: "Debit Air", val: `${sensor.debitAir} m³/s`, icon: "🌊", sub: sensor.debitAir > 2 ? "Tinggi" : "Normal" },
-            { label: "Suhu Udara", val: `${sensor.suhu}°C`, icon: "🌡️", sub: "Humid" },
+            { label: "Curah Hujan", val: formatValue(sensor.curahHujan, " mm/h"), icon: "🌧️", sub: sensor.curahHujan === null ? "Memuat..." : sensor.curahHujan > 30 ? "Lebat" : "Sedang" },
+            { label: "Ketinggian Air", val: formatValue(sensor.ketinggianAir, " cm"), icon: "📏", sub: sensor.ketinggianAir === null ? "Memuat..." : sensor.ketinggianAir > 70 ? "Kritis" : "Normal" },
+            { label: "Debit Air", val: formatValue(sensor.debitAir, " m³/s"), icon: "🌊", sub: sensor.debitAir === null ? "Memuat..." : sensor.debitAir > 2 ? "Tinggi" : "Normal" },
+            { label: "Suhu Udara", val: formatValue(sensor.suhu, "°C"), icon: "🌡️", sub: sensor.suhu === null ? "Memuat..." : humidityLabel },
           ].map(card => (
             <div key={card.label} style={{
               background: "#fff", borderRadius: 14, padding: "14px 14px",
@@ -289,45 +320,9 @@ function MapScreen({ zones }) {
         <div style={{ fontSize: 12, color: "#93C5FD", marginTop: 2 }}>Jl. Sirojudin & sekitarnya</div>
       </div>
 
-      {/* Map area */}
+      {/* Map area (real map) */}
       <div style={{ position: "relative", flex: "0 0 52%", background: "#E8F0FE", overflow: "hidden" }}>
-        {/* Fake road grid */}
-        <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M40 0 L0 0 0 40" fill="none" stroke="#C7D9FB" strokeWidth="0.5"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)"/>
-          {/* Main road */}
-          <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#B0C4DE" strokeWidth="8" strokeOpacity="0.6"/>
-          <line x1="50%" y1="0" x2="50%" y2="100%" stroke="#B0C4DE" strokeWidth="5" strokeOpacity="0.4"/>
-          <line x1="25%" y1="0" x2="30%" y2="100%" stroke="#B0C4DE" strokeWidth="3" strokeOpacity="0.3"/>
-          <text x="51%" y="47%" fontSize="10" fill="#64748B" fontWeight="600">Jl. Sirojudin</text>
-        </svg>
-
-        {/* Zone markers */}
-        {zones.map(z => (
-          <button key={z.id} onClick={() => setSelected(selected === z.id ? null : z.id)}
-            style={{
-              position: "absolute",
-              left: `${z.x}%`, top: `${z.y}%`,
-              transform: "translate(-50%, -50%)",
-              width: selected === z.id ? 44 : 32,
-              height: selected === z.id ? 44 : 32,
-              borderRadius: "50%",
-              background: RISK_COLOR[z.risk].bg,
-              border: "3px solid #fff",
-              cursor: "pointer",
-              boxShadow: `0 4px 16px ${RISK_COLOR[z.risk].bg}66`,
-              transition: "all 0.2s ease",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "#fff", fontSize: selected === z.id ? 16 : 12, fontWeight: 800,
-              zIndex: selected === z.id ? 10 : 1,
-            }}>
-            {z.id}
-          </button>
-        ))}
+        <MapView zones={zones} onSelect={(id) => setSelected(selected === id ? null : id)} />
 
         {/* Legend */}
         <div style={{
@@ -479,14 +474,11 @@ function MonitorScreen({ sensor }) {
   );
 }
 
-function AlertScreen() {
-  const alerts = [
-    { id: 1, time: "14:32", date: "Hari ini", risk: "bahaya", title: "Ketinggian air kritis!", msg: "Level air di Zona 1 mencapai 87 cm. Segera waspada.", icon: "🚨" },
-    { id: 2, time: "13:15", date: "Hari ini", risk: "waspada", title: "Curah hujan lebat terdeteksi", msg: "Curah hujan mencapai 38 mm/h. Pantau terus kondisi.", icon: "⚡" },
-    { id: 3, time: "08:40", date: "Hari ini", risk: "aman", title: "Kondisi kembali normal", msg: "Semua sensor menunjukkan level aman.", icon: "✅" },
-    { id: 4, time: "21:18", date: "Kemarin", risk: "waspada", title: "Peringatan debit air tinggi", msg: "Debit aliran di atas normal. Waspada di Zona 2–3.", icon: "⚡" },
-    { id: 5, time: "17:05", date: "Kemarin", risk: "bahaya", title: "Banjir ringan terjadi", msg: "Genangan air dilaporkan di depan Gang Sirojudin 3.", icon: "🚨" },
-  ];
+function AlertScreen({ sensor = {}, zones = [], alerts = [] }) {
+
+  const groupedAlerts = Object.entries(
+    alerts.reduce((g, a) => { (g[a.date] = g[a.date] || []).push(a); return g; }, {})
+  );
 
   return (
     <div style={{ height: "100%", overflowY: "auto", background: "#F4F7FF" }}>
@@ -495,37 +487,41 @@ function AlertScreen() {
         padding: "48px 20px 20px", color: "#fff",
       }}>
         <div style={{ fontSize: 18, fontWeight: 800 }}>🚨 Riwayat Peringatan</div>
-        <div style={{ fontSize: 12, color: "#93C5FD", marginTop: 2 }}>Log notifikasi sistem</div>
+        <div style={{ fontSize: 12, color: "#93C5FD", marginTop: 2 }}>Log notifikasi sistem (real-time)</div>
       </div>
 
       <div style={{ padding: "16px 16px 80px" }}>
-        {Object.entries(
-          alerts.reduce((g, a) => { (g[a.date] = g[a.date] || []).push(a); return g; }, {})
-        ).map(([date, items]) => (
-          <div key={date}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
-              {date}
-            </div>
-            {items.map(a => (
-              <div key={a.id} style={{
-                background: "#fff", borderRadius: 14, padding: "14px 14px",
-                marginBottom: 10, display: "flex", gap: 12,
-                boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-                borderLeft: `4px solid ${RISK_COLOR[a.risk].bg}`,
-              }}>
-                <div style={{ fontSize: 22, flexShrink: 0 }}>{a.icon}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0F2952" }}>{a.title}</div>
-                    <div style={{ fontSize: 10, color: "#94A3B8", flexShrink: 0, marginLeft: 8 }}>{a.time}</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 4, lineHeight: 1.5 }}>{a.msg}</div>
-                  <div style={{ marginTop: 8 }}><RiskBadge risk={a.risk}/></div>
-                </div>
-              </div>
-            ))}
+        {groupedAlerts.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#94A3B8", textAlign: "center", marginTop: 20, padding: "20px" }}>
+            ✅ Tidak ada peringatan. Sistem berjalan normal.
           </div>
-        ))}
+        ) : (
+          groupedAlerts.map(([date, items]) => (
+            <div key={date}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
+                {date}
+              </div>
+              {items.map(a => (
+                <div key={a.id} style={{
+                  background: "#fff", borderRadius: 14, padding: "14px 14px",
+                  marginBottom: 10, display: "flex", gap: 12,
+                  boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+                  borderLeft: `4px solid ${RISK_COLOR[a.risk].bg}`,
+                }}>
+                  <div style={{ fontSize: 22, flexShrink: 0 }}>{a.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#0F2952" }}>{a.title}</div>
+                      <div style={{ fontSize: 10, color: "#94A3B8", flexShrink: 0, marginLeft: 8 }}>{a.time}</div>
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748B", marginTop: 4, lineHeight: 1.5 }}>{a.msg}</div>
+                    <div style={{ marginTop: 8 }}><RiskBadge risk={a.risk}/></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -676,19 +672,71 @@ export default function App() {
   const [screen, setScreen] = useState("splash");
   const sensor = useSensorData();
   const [zones, setZones] = useState(ZONES);
+  const { alerts, addAlert } = useAlertHistory();
+  const lastConditionRef = useRef({ lastRisk: null, lastMaxLevel: null, lastRainState: null });
 
   useEffect(() => {
-    if (!sensor.loading) {
-      setZones(ZONES.map((z, i) => {
-        const base = sensor.curahHujan * 8 + sensor.humidity * 0.3;
-        const level = Math.min(95, Math.max(5, Math.round(base - i * 8 + Math.random() * 5)));
-        const risk = level > 65 ? "bahaya" : level > 35 ? "waspada" : "aman";
-        return { ...z, risk, level };
-      }));
-    }
-  }, [sensor.curahHujan, sensor.humidity, sensor.loading]);
+    if (!sensor.loading && sensor.curahHujan !== null) {
+      setZones(prev => {
+        const updated = ZONES.map((z, i) => {
+          const base = sensor.curahHujan * 8 + (sensor.humidity || 0) * 0.3;
+          const level = Math.min(95, Math.max(5, Math.round(base - i * 8 + Math.random() * 5)));
+          const risk = level > 65 ? "bahaya" : level > 35 ? "waspada" : "aman";
+          return { ...z, risk, level };
+        });
 
-  // Slowly mutate zone risks based on sensor
+        const maxLevel = Math.max(...updated.map(z => z.level));
+        const maxRisk = updated.find(z => z.risk === "bahaya")
+          ? "bahaya"
+          : updated.find(z => z.risk === "waspada")
+          ? "waspada"
+          : "aman";
+        const rainState = sensor.curahHujan > 30 ? "lebat" : sensor.curahHujan > 15 ? "sedang" : "ringan";
+
+        // Detect changes and generate alerts
+        if (lastConditionRef.current.lastRisk !== maxRisk) {
+          if (maxRisk === "bahaya") {
+            addAlert(
+              "⚠️ Kondisi BAHAYA Terdeteksi!",
+              `Level air mencapai ${maxLevel}%. Segera lakukan evakuasi. Hubungi BPBD.`,
+              "bahaya",
+              "🚨"
+            );
+          } else if (maxRisk === "waspada" && lastConditionRef.current.lastRisk !== null) {
+            addAlert(
+              "⚡ Status Berubah ke WASPADA",
+              `Level air meningkat ke ${maxLevel}%. Siapkan barang darurat.`,
+              "waspada",
+              "⚡"
+            );
+          } else if (maxRisk === "aman" && lastConditionRef.current.lastRisk !== null) {
+            addAlert(
+              "✅ Kondisi Kembali Normal",
+              `Semua zona menunjukkan level aman. Lanjutkan pemantauan.`,
+              "aman",
+              "✅"
+            );
+          }
+          lastConditionRef.current.lastRisk = maxRisk;
+        }
+
+        if (lastConditionRef.current.lastRainState !== rainState && rainState === "lebat") {
+          addAlert(
+            "🌧️ Curah Hujan Lebat",
+            `Curah hujan mencapai ${sensor.curahHujan} mm/h. Pantau terus perkembangan.`,
+            sensor.curahHujan > 30 ? "bahaya" : "waspada",
+            "🌧️"
+          );
+          lastConditionRef.current.lastRainState = rainState;
+        }
+
+        lastConditionRef.current.lastMaxLevel = maxLevel;
+        return updated;
+      });
+    }
+  }, [sensor.curahHujan, sensor.humidity, sensor.loading, addAlert]);
+
+  // Slowly mutate zone risks
   useEffect(() => {
     const t = setInterval(() => {
       setZones(prev => prev.map(z => {
@@ -707,8 +755,10 @@ export default function App() {
 
   if (screen === "splash") {
     return (
-      <div style={{ width: 360, height: 720, margin: "0 auto", borderRadius: 40, overflow: "hidden",
-        boxShadow: "0 30px 80px rgba(0,0,0,0.3)", position: "relative", background: "#0A1628" }}>
+      <div style={{
+        width: 360, height: 720, margin: "0 auto", borderRadius: 40, overflow: "hidden",
+        boxShadow: "0 30px 80px rgba(0,0,0,0.3)", position: "relative", background: "#0A1628"
+      }}>
         <style>{`
           @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
           @keyframes slideUp { from { opacity: 0; transform: translateY(20px) } to { opacity: 1; transform: translateY(0) } }
@@ -755,7 +805,11 @@ export default function App() {
 
       {/* Screen content */}
       <div style={{ height: "100%", paddingBottom: 0 }}>
-        <Screen sensor={sensor} onNav={setScreen} zones={zones}/>
+        {screen === "alert" ? (
+          <Screen sensor={sensor} onNav={setScreen} zones={zones} alerts={alerts} />
+        ) : (
+          <Screen sensor={sensor} onNav={setScreen} zones={zones} />
+        )}
       </div>
 
       <NavBar current={screen} onNav={setScreen}/>
