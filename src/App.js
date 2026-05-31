@@ -157,7 +157,7 @@ function SplashScreen({ onDone }) {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
 // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); 711d5cac5ebc7be732c8676261d7c9125b4f9a89
+  }, []); 
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
