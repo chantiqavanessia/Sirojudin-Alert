@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import MapView from "./MapView";
 
 // ── MOCK DATA ────────────────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ function SplashScreen({ onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
-  }, []);
+  }, [onDone]);
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
@@ -674,13 +674,17 @@ export default function App() {
   const [zones, setZones] = useState(ZONES);
   const { alerts, addAlert } = useAlertHistory();
   const lastConditionRef = useRef({ lastRisk: null, lastMaxLevel: null, lastRainState: null });
+  const handleSplashDone = useCallback(() => setScreen("home"), []);
 
   useEffect(() => {
     if (!sensor.loading && sensor.curahHujan !== null) {
       setZones(prev => {
         const updated = ZONES.map((z, i) => {
           const base = sensor.curahHujan * 8 + (sensor.humidity || 0) * 0.3;
-          const level = Math.min(95, Math.max(5, Math.round(base - i * 8 + Math.random() * 5)));
+          const targetLevel = Math.min(95, Math.max(5, Math.round(base - i * 8)));
+          const previousLevel = prev[i]?.level ?? targetLevel;
+          const levelChange = targetLevel - previousLevel;
+          const level = Math.min(95, Math.max(5, previousLevel + Math.max(-4, Math.min(4, levelChange))));
           const risk = level > 65 ? "bahaya" : level > 35 ? "waspada" : "aman";
           return { ...z, risk, level };
         });
@@ -736,23 +740,6 @@ export default function App() {
     }
   }, [sensor.curahHujan, sensor.humidity, sensor.loading, addAlert]);
 
-  // Slowly mutate zone risks
-  useEffect(() => {
-    const t = setInterval(() => {
-      setZones(prev => prev.map(z => {
-        const rand = Math.random();
-        if (rand > 0.93) {
-          const risks = ["aman", "waspada", "bahaya"];
-          const cur = risks.indexOf(z.risk);
-          const next = Math.max(0, Math.min(2, cur + (Math.random() > 0.5 ? 1 : -1)));
-          return { ...z, risk: risks[next], level: Math.min(95, Math.max(10, z.level + (Math.random() - 0.4) * 10)) };
-        }
-        return z;
-      }));
-    }, 6000);
-    return () => clearInterval(t);
-  }, []);
-
   if (screen === "splash") {
     return (
       <div style={{
@@ -765,7 +752,7 @@ export default function App() {
           @keyframes bounceIn { 0% { transform: scale(0.5); opacity: 0 } 70% { transform: scale(1.1) } 100% { transform: scale(1); opacity: 1 } }
           @keyframes pulse { 0% { transform: scale(1); opacity: 0.8 } 100% { transform: scale(2.5); opacity: 0 } }
         `}</style>
-        <SplashScreen onDone={() => setScreen("home")}/>
+        <SplashScreen onDone={handleSplashDone}/>
       </div>
     );
   }
