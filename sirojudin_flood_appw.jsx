@@ -123,7 +123,8 @@ function SplashScreen({ onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
-  }, [onDone]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div style={{
       height: "100%", display: "flex", flexDirection: "column",
