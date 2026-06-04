@@ -6,8 +6,8 @@ const ZONES = [
   { id: 1, name: "Depan Gang Sirojudin 3", risk: "bahaya", level: 87, lat: -7.056643, lng: 110.436249 },
   { id: 2, name: "Persimpangan Utama", risk: "waspada", level: 61, lat: -7.056477, lng: 110.436498 },
   { id: 3, name: "Kos Area Barat", risk: "waspada", level: 58, lat: -7.057674, lng: 110.435833 },
-  { id: 4, name: "Area Masjid", risk: "aman", level: 22, lat: -6.9730, lng: 110.4170 },
-  { id: 5, name: "Ujung Selatan", risk: "aman", level: 15, lat: -6.9790, lng: 110.4140 },
+  { id: 4, name: "Area Masjid", risk: "aman", level: 22, lat: -7.057949, lng: 110.436087 },
+{ id: 5, name: "Ujung Selatan", risk: "aman", level: 15, lat: -7.058608, lng: 110.435516 },
 ];
 
 const RISK_COLOR = {
